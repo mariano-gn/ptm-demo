@@ -1,11 +1,198 @@
 <a href="#es">Español</a>
 <a id="top"></a>
 <br>
-<!--English-->
+Hello all!
+&nbsp;
+Short post this time, the thing is I found this oddity and I wanted to just share it.
+&nbsp;
+They're called <i>pointers to members</i>. It's an interesting feature from C++ that allows you to store an pointer to either a data member or a method of a class. Now the key point, is that it points to the <i>class</i> member and not to a particular <i>instance</i> member.
+&nbsp;
+It's better to look at the example.
+<h3>The class</h3>
+[code language="cpp"]
+class A {
+public:
+    A(int val1, int val2) : data_member1(val1), data_member2(val2) {}
+    
+    void function_member() {
+        std::cout << "Hello from A::function_member!" <<
+            "\n\tMy data_member1 is: " << data_member1 <<
+            "\n\tAnd my data_member2 is: " << data_member2 << std::endl;
+    }
+
+    int data_member1 = 0;
+    int data_member2 = 1;
+};
+[/code]
+Very simple class, 2 public data members, 1 public member function that just prints it's members data. One ctor taking as input the values for the 2 data members.
+<h3>The retrieval</h3>
+[code language="cpp"]
+int main() {
+    // Initialize a vector of A's.
+    std::vector<A> vec{ {1, 2}, {15, 3}, {5, 30}, {100, 10000} };
+
+    // Grab the pointer to the function member and the 2 data members.
+    auto pointer_to_fn_member = &A::function_member;
+    auto pointer_to_fst_data_member = &A::data_member1;
+    auto pointer_to_snd_data_member = &A::data_member2;
+
+    std::cout << "Iterating to execute.\n";
+    for (auto item : vec) {
+        execute_on_object(item, pointer_to_fn_member);
+    }
+
+    std::cout << "Iterating to print the first value of each member.\n";
+    for (auto item : vec) {
+        print_from_object(item, pointer_to_fst_data_member);
+    }
+
+    std::cout << "Iterating to print the second value of each member.\n";
+    for (auto item : vec) {
+        print_from_object(item, pointer_to_snd_data_member);
+    }
+}
+[/code]
+Besides the initialization of the vector of As to test, you see the 3 declarations that grab the pointers to each member. Now, I've used <code>auto</code> because the declaration of pointers to members is a bit nasty (specially for function members), see, the same 3 declarations using <code>typedef</code> and using nothing else:
+[code language="cpp"]
+//using typedefs
+typedef void (A::* PTFM)();
+typedef int A::* PTDM;
+PTFM pointer_to_fn_member = &A::function_member;
+PTDM pointer_to_fst_data_member = &A::data_member1;
+PTDM pointer_to_snd_data_member = &A::data_member2;
+
+//using nothing else
+void (A::* pointer_to_fn_member)() = &A::function_member;
+int A::* pointer_to_fst_data_member = &A::data_member1;
+int A::* pointer_to_snd_data_member = &A::data_member2;
+[/code]
+And this with extremely simple cases of types (both for the data members and the method), so I appreciate the existence of <code>auto</code> :)
+&nbsp;
+For the case of the function member, is not that alien, is just a function pointer which happens to need the existence of an object (if it needs to use <code>this</code> either implicitly or explicitly). This is seen often to transform a method call to a stand alone function through <code>std::bind</code> and <code>std::function</code> objects (i.e. for the Active Object pattern). But the pointer to a data member is stranger. 
+&nbsp;
+First, because it's not seen often and second, because even if it's called <i>pointer</i> is more of an <i>offset</i>. If you debug the code on an IDE, to look at the values of <code>pointer_to_fst_data_member</code> and <code>pointer_to_snd_data_member</code>, you will see that they are <i>0x00000000</i> and <i>0x00000004</i>. They are the offset from the base pointer to the position of the member (try for yourself, change the type of the first member and see how <code>pointer_to_snd_data_member</code> changes accordingly).
+&nbsp;
+The rest of the code iterates over each item in the vector and calls one of the 2 auxiliary functions to use either a pointer to function member or pointer to data member. We'll see the implementation of those 2 now:
+<h3>Usage - pointer to function member</h3>
+[code language="cpp"]
+template<typename T, typename U>
+void execute_on_object(T&& object, U&& method) {
+    // Important: due to operators precedence,
+    // you need to resolve first either "object.*method" or "object->*method" before actually calling the method.
+    (object.*method)();
+}
+[/code]
+You see that this is not that hard, the <code>object.*method</code> syntax uses the object and the function member to execute the method on the instance, given the parameters that follow (none in this case). Identicall to call <code>object.function_member()</code>. 
+&nbsp;
+There is a little detail. Using function member pointers you get static dispatch, that means polymorphism will not work. Because you're saving the pointer to the function, it's either to the base class or the derived one, it's resolved as soon as you declare the variable that will hold it. There will be no vtable lookup.
+<h3>Usage - pointer to data member</h3>
+[code language="cpp"]
+template<typename T, typename U>
+void print_from_object(T&& object, U&& member) {
+    std::cout << "Printing value from object: " << object.*member << std::endl;
+}
+[/code]
+Here again the syntax is not complex, derreference the pointer and use it on the object. Under the hood, the address to look up for data will be the sum of the base address of the object plus the offset declared by the data member pointer.
+&nbsp;
+That's it! Very quick this time. Hope you like it! (<a href="https://github.com/mariano-gn/ptm-demo">Source Code</a>)
 <br>
 <a href="#top">Back to Top</a>
 <hr>
 <a id="es"></a>
 <br>
-<!--Español-->
+¡Hola!
+&nbsp;
+Artículo corto esta vez, la cosa es que encontré esta curiosidad que solo quería compartir.
+&nbsp;
+Se llaman <i>punteros a miembros</i>. Es una característica interesante de C++ que permite almacenar un puntero a tanto variables miembro como métodos de una clase. El punto clave, es que apuntan al miembro de la <i>clase</i> y no al miembro de una <i>instancia</i> particular.
+&nbsp;
+Mejor con un ejemplo.
+<h3>La clase</h3>
+[code language="cpp"]
+class A {
+public:
+    A(int val1, int val2) : data_member1(val1), data_member2(val2) {}
+    
+    void function_member() {
+        std::cout << "Hello from A::function_member!" <<
+            "\n\tMy data_member1 is: " << data_member1 <<
+            "\n\tAnd my data_member2 is: " << data_member2 << std::endl;
+    }
+
+    int data_member1 = 0;
+    int data_member2 = 1;
+};
+[/code]
+Clase simple, dos variables miembro públicas y una función pública que solo imprime los datos. Un constructor que toma como parámetros los valores para las dos variables miembro.
+<h3>La obtención</h3>
+[code language="cpp"]
+int main() {
+    // Initialize a vector of A's.
+    std::vector<A> vec{ {1, 2}, {15, 3}, {5, 30}, {100, 10000} };
+
+    // Grab the pointer to the function member and the 2 data members.
+    auto pointer_to_fn_member = &A::function_member;
+    auto pointer_to_fst_data_member = &A::data_member1;
+    auto pointer_to_snd_data_member = &A::data_member2;
+
+    std::cout << "Iterating to execute.\n";
+    for (auto item : vec) {
+        execute_on_object(item, pointer_to_fn_member);
+    }
+
+    std::cout << "Iterating to print the first value of each member.\n";
+    for (auto item : vec) {
+        print_from_object(item, pointer_to_fst_data_member);
+    }
+
+    std::cout << "Iterating to print the second value of each member.\n";
+    for (auto item : vec) {
+        print_from_object(item, pointer_to_snd_data_member);
+    }
+}
+[/code]
+Además de la inicialización del vector de As para la prueba, se ven tres declaraciones que obtienen los punteros a cada miembro. Usé <code>auto</code> porque la declaración de punteros a miembros es un poquito 'fea' (especialmente para punteros a funciones miembros), acá están, las tres mismas declaraciones usando <code>typedef</code> y usando nada:
+[code language="cpp"]
+//usando typedefs
+typedef void (A::* PTFM)();
+typedef int A::* PTDM;
+PTFM pointer_to_fn_member = &A::function_member;
+PTDM pointer_to_fst_data_member = &A::data_member1;
+PTDM pointer_to_snd_data_member = &A::data_member2;
+
+//usando nada extra
+void (A::* pointer_to_fn_member)() = &A::function_member;
+int A::* pointer_to_fst_data_member = &A::data_member1;
+int A::* pointer_to_snd_data_member = &A::data_member2;
+[/code]
+Y esto con tipos de datos super simples (tanto para las variables como para el método), así  que aprecio la existencia de <code>auto</code> :)
+&nbsp;
+Para el caso de la función, no es tan ajena, es simplemente un puntero a función que resulta necesitar la existencia de un objeto (si es que necesita utilizar <code>this</code> tanto implícita como explícitamente). Esto se ve seguido para convertir una llamada a un método de un objeto en una función independiente, usando <code>std::bind</code> y objetos <code>std::function</code> (p.e. para el patrón Active Object). Sin embargo el puntero a una variable miembro es más raro. 
+&nbsp;
+Primero, porque no se ve seguido y segundo, porque aún llamándose <i>puntero</i> es más bien un <i>offset</i>. Si debuggeás el código con un IDE, para ver los valores que toman <code>pointer_to_fst_data_member</code> y <code>pointer_to_snd_data_member</code>, ves que son <i>0x00000000</i> y <i>0x00000004</i>. Ambos son desplazamientos (offsets) de la posición del puntero base a la posición del miembro (podés probarlo, cambiá el tipo del primer miembro y vas a ver como <code>pointer_to_snd_data_member</code> cambia de acuerdo con ello).
+&nbsp;
+El resto del código itera sobre cada item del vector y llama una de dos funciones auxiliares para usar ya sea el puntero a función o variable miembro. Acá van las implementaciones:
+<h3>Utilización - puntero a función miembro</h3>
+[code language="cpp"]
+template<typename T, typename U>
+void execute_on_object(T&& object, U&& method) {
+    // Importante: debido a la precedencia de operadores, 
+    // es necesario primero resolver ya sea "object.*method" o "object->*method" 
+    // antes de llamar a la ejecución del mismo.
+    (object.*method)();
+}
+[/code]
+No es muy difícil, la sintaxis <code>object.*method</code> usa el objeto y el puntero para ejecutar ese método en la instancia, dado los parámetros que siguen (en este caso ninguno). Idéntico a llamar <code>object.function_member()</code>. 
+&nbsp;
+Hay un detalle. Utilizando punteros a funciones miembro se obtiene despacho estático (static dispatch), lo que significa que no va a funcionar el polimorfismo. Como se guarda el puntero a la función, va a ser a la función definida en la clase base o en la derivada, se resuelve en el instante que se declara la variable que va a contener el puntero. No se realizará un lookup en la vtable.
+<h3>Utilización - puntero a variable miembro</h3>
+[code language="cpp"]
+template<typename T, typename U>
+void print_from_object(T&& object, U&& member) {
+    std::cout << "Printing value from object: " << object.*member << std::endl;
+}
+[/code]
+Nuevamente la sintaxis no es compleja, se derreferencia el puntero y se utiliza en el objeto. Tras bambalinas, la dirección de memorial para buscar el dato va a ser la suma de la dirección base del objeto más el offset declarado por el puntero a variable miembro.
+&nbsp;
+¡Listo! Muy rápido esta vez. ¡Espero haya gustado! (<a href="https://github.com/mariano-gn/ptm-demo">Código fuente</a>)
 <a href="#es">Inicio</a>
